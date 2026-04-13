@@ -318,13 +318,15 @@ class MarkdownToDocxConverter:
                     content = self._format_inline(row_data[col_idx])
                 else:
                     content = ''
-                cell.text = content
+
+                # 清空默认段落并使用 run 设置字体
+                cell.paragraphs[0].clear()
+                run = cell.paragraphs[0].add_run(content)
+                self._set_run_font(run, '宋体')
 
                 # 第一行作为表头，加粗显示
                 if row_idx == 0:
-                    for paragraph in cell.paragraphs:
-                        for run in paragraph.runs:
-                            run.bold = True
+                    run.bold = True
 
         # 在表格后添加空行
         self.doc.add_paragraph()
@@ -370,13 +372,17 @@ class MarkdownToDocxConverter:
             content = self._extract_list_content(line)
             formatted_content = self._format_inline(content)
 
-            # 添加列表项
+            # 添加列表项 - 使用 run 确保字体生效
             if re.match(r'^[\s]*\d+[.)]', line.lstrip()):
                 # 有序列表
-                p = self.doc.add_paragraph(formatted_content, style='List Number')
+                p = self.doc.add_paragraph(style='List Number')
             else:
                 # 无序列表
-                p = self.doc.add_paragraph(formatted_content, style='List Bullet')
+                p = self.doc.add_paragraph(style='List Bullet')
+
+            # 添加带字体的 run
+            run = p.add_run(formatted_content)
+            self._set_run_font(run, '宋体')
 
             # 设置缩进级别
             if indent > 0:
@@ -474,15 +480,16 @@ class MarkdownToDocxConverter:
         content = line[level:].strip()
         formatted_content = self._format_inline(content)
 
-        # 添加标题
-        if level <= 3:
-            p = self.doc.add_heading(formatted_content, level=level)
-        else:
-            # 4-6级标题作为带样式的段落
-            p = self.doc.add_paragraph()
-            run = p.add_run(formatted_content)
-            run.bold = True
-            self._set_run_font(run, '宋体', 12 - level)
+        # 添加标题 - 统一使用段落+run 方式以确保字体生效
+        p = self.doc.add_paragraph()
+        run = p.add_run(formatted_content)
+        run.bold = True
+        # 根据标题级别设置字号
+        font_sizes = {1: 16, 2: 14, 3: 12, 4: 11, 5: 11, 6: 10}
+        font_size = font_sizes.get(level, 11)
+        self._set_run_font(run, '宋体', font_size)
+        # 设置标题样式
+        p.style = self.doc.styles[f'Heading {min(level, 3)}']
 
     def _add_paragraph(self, line: str):
         """添加普通段落，支持图片"""
@@ -493,9 +500,11 @@ class MarkdownToDocxConverter:
         images = list(re.finditer(img_pattern, line))
 
         if not images:
-            # 没有图片，按普通段落处理
+            # 没有图片，按普通段落处理 - 使用 run 确保字体生效
             formatted_content = self._format_inline(line)
-            self.doc.add_paragraph(formatted_content)
+            p = self.doc.add_paragraph()
+            run = p.add_run(formatted_content)
+            self._set_run_font(run, '宋体')
             return
 
         # 处理包含图片的段落
@@ -507,7 +516,9 @@ class MarkdownToDocxConverter:
             text_before = line[last_end:match.start()]
             if text_before.strip():
                 formatted_text = self._format_inline(text_before)
-                self.doc.add_paragraph(formatted_text)
+                p = self.doc.add_paragraph()
+                run = p.add_run(formatted_text)
+                self._set_run_font(run, '宋体')
 
             # 添加图片
             alt_text = match.group(1)
@@ -528,7 +539,9 @@ class MarkdownToDocxConverter:
         text_after = line[last_end:]
         if text_after.strip():
             formatted_text = self._format_inline(text_after)
-            self.doc.add_paragraph(formatted_text)
+            p = self.doc.add_paragraph()
+            run = p.add_run(formatted_text)
+            self._set_run_font(run, '宋体')
 
     def _format_inline(self, text: str) -> str:
         """
